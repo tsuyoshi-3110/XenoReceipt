@@ -45,6 +45,8 @@ export type Receipt = ReceiptFields & {
   imagePath: string;
   /** AI の読み取りを使ったか */
   ocrUsed: boolean;
+  /** 続けて撮って人が確かめずに保存したもののうち、読めなかった・内訳が合わないなど確かめてほしいもの。人が直して保存すると消える */
+  needsReview: boolean;
 };
 
 function receiptsCollection(uid: string) {
@@ -81,6 +83,7 @@ export async function listReceipts(uid: string, month: string): Promise<Receipt[
       memo: String(data.memo ?? ""),
       imagePath: String(data.imagePath ?? ""),
       ocrUsed: data.ocrUsed === true,
+      needsReview: data.needsReview === true,
     };
   });
 }
@@ -101,7 +104,13 @@ export class ReceiptImageUploadError extends Error {
 /**
  * 新しく登録する。写真を先に上げてから記録を書く（記録だけ残って写真が無い、を作らない）。
  */
-export async function createReceipt(uid: string, fields: ReceiptFields, image: Blob | null, ocrUsed: boolean): Promise<void> {
+export async function createReceipt(
+  uid: string,
+  fields: ReceiptFields,
+  image: Blob | null,
+  ocrUsed: boolean,
+  needsReview = false,
+): Promise<void> {
   const docRef = doc(receiptsCollection(uid));
   let imagePath = "";
   if (image) {
@@ -116,15 +125,16 @@ export async function createReceipt(uid: string, fields: ReceiptFields, image: B
     ...fields,
     imagePath,
     ocrUsed,
+    needsReview,
     inputType: image ? "receipt" : "manual",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 }
 
-/** 中身を直す。写真は差し替えない（撮り直すなら登録し直す） */
+/** 中身を直す。写真は差し替えない（撮り直すなら登録し直す）。人が確かめて保存したので「要確認」は消す */
 export async function updateReceipt(uid: string, id: string, fields: ReceiptFields): Promise<void> {
-  await updateDoc(doc(receiptsCollection(uid), id), { ...fields, updatedAt: serverTimestamp() });
+  await updateDoc(doc(receiptsCollection(uid), id), { ...fields, needsReview: false, updatedAt: serverTimestamp() });
 }
 
 export async function deleteReceipt(uid: string, receipt: Receipt): Promise<void> {

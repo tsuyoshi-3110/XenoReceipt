@@ -1,12 +1,15 @@
 "use client";
 
 import { signOut, type User } from "firebase/auth";
-import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Camera, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Images, Loader2, Plus, Sparkles, Trash2, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FileDropOverlay } from "@/components/FileDropOverlay";
 import { ReceiptForm } from "@/components/ReceiptForm";
+import { ReceiptScanner } from "@/components/ReceiptScanner";
+import { useDesktopPointer } from "@/components/useDesktopPointer";
 import { useFileDrop } from "@/components/useFileDrop";
+import { useReceiptQueue } from "@/components/useReceiptQueue";
 import { UNSET_CATEGORY } from "@/lib/categories";
 import { exportReceiptsExcel } from "@/lib/exportExcel";
 import { exportReceiptsPdf } from "@/lib/exportPdf";
@@ -14,6 +17,7 @@ import { auth } from "@/lib/firebaseClient";
 import { formatYen, monthLabel, shiftMonth, shortDate } from "@/lib/format";
 import { isPdfFile, todayLocal } from "@/lib/receiptImage";
 import { deleteReceipt, listReceipts, receiptExTax, type Receipt } from "@/lib/receipts";
+import { isScannerAvailable } from "@/lib/receiptScan";
 import { chronological, totalsByCategory } from "@/lib/summary";
 
 type FormState = { editing: Receipt | null; file: File | null } | null;
@@ -27,6 +31,15 @@ export function ReceiptBook({ user }: { user: User }) {
   const [exporting, setExporting] = useState("");
   const [exportError, setExportError] = useState("");
   const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
+  /** 続けて撮るスキャナを開いているか。開いているあいだに撮った枚数 */
+  const [scanning, setScanning] = useState(false);
+  const [shots, setShots] = useState(0);
+  /** スキャナを開けなかった理由。出したうえで、写真を選ぶほうへ回す */
+  const [scanError, setScanError] = useState("");
+  /** 続けて保存したうち、いま見ている月ではない日付だったもの。消えたように見えないよう知らせる */
+  const [otherMonths, setOtherMonths] = useState<string[]>([]);
+  const pickRef = useRef<HTMLInputElement | null>(null);
+  const desktop = useDesktopPointer();
 
   const load = useCallback(async () => {
     setLoadError("");
@@ -55,11 +68,24 @@ export function ReceiptBook({ user }: { user: User }) {
   }, [load]);
   useEffect(() => { queueMicrotask(() => { void loadQuota(); }); }, [loadQuota]);
 
-  // 一覧へレシートの画像・PDF をドラッグしたら、そのまま登録の画面を開いて読み取る
+  // 続けて撮った（まとめて取り込んだ）レシートは裏で順に読んで保存する。1枚終わるごとに一覧を読み直す
+  const batch = useReceiptQueue(user.uid, (saved) => {
+    const savedMonth = saved.expenseDate.slice(0, 7);
+    if (savedMonth === month) void load();
+    else setOtherMonths((list) => (list.includes(savedMonth) ? list : [...list, savedMonth]));
+  });
+
+  /*
+   * 一覧へレシートの画像・PDF をドラッグしたら取り込む。
+   * 1枚なら登録の画面を開いて確かめながら、何枚もまとめてなら続けて撮ったときと同じく裏で保存する。
+   */
   const drop = useFileDrop((files) => {
-    const file = files.find((item) => item.type.startsWith("image/") || isPdfFile(item));
-    if (file) setForm({ editing: null, file });
-  }, form === null);
+    const receiptsDropped = files.filter((item) => item.type.startsWith("image/") || isPdfFile(item));
+    if (receiptsDropped.length === 1) setForm({ editing: null, file: receiptsDropped[0] });
+    else batch.add(receiptsDropped);
+  }, form === null && !scanning);
+
+  const reviewCount = (receipts ?? []).filter((r) => r.needsReview).length;
 
   const rows = receipts ? chronological(receipts) : [];
   const total = rows.reduce((sum, r) => sum + r.amount, 0);
@@ -99,6 +125,7 @@ export function ReceiptBook({ user }: { user: User }) {
       <div className="mt-3 text-center">
         <p className="text-2xl font-bold tabular-nums">{formatYen(total)}</p>
         <p className="mt-1 text-xs text-slate-500">{rows.length}件・税抜 {formatYen(totalExTax)}</p>
+        {reviewCount > 0 && <p className="mt-1 text-xs font-semibold text-amber-700">要確認 {reviewCount}件（押して確かめると消えます）</p>}
       </div>
       {rows.length > 0 && <table className="mt-4 w-full text-sm">
         <tbody>
@@ -117,6 +144,23 @@ export function ReceiptBook({ user }: { user: User }) {
       {exportError && <p className="mt-2 text-right text-xs font-semibold text-red-600">{exportError}</p>}
     </section>
 
+    {(batch.waiting > 0 || batch.saved > 0 || batch.failed > 0) && <section className="mt-5 rounded-2xl bg-white p-4 text-sm shadow-sm">
+      {batch.waiting > 0
+        ? <p className="flex items-center gap-2 font-semibold"><Loader2 size={15} className="animate-spin text-[var(--brand)]" />読み取って保存しています（残り {batch.waiting}枚）</p>
+        : <div className="flex items-center justify-between gap-2">
+          <p className="font-semibold">{batch.saved}枚 保存しました{batch.review > 0 && <span className="text-amber-700">（要確認 {batch.review}枚）</span>}</p>
+          {batch.failed === 0 && <button type="button" className="text-xs text-slate-500 underline" onClick={() => { batch.dismiss(); setOtherMonths([]); }}>閉じる</button>}
+        </div>}
+      {otherMonths.length > 0 && <p className="mt-1 text-xs text-slate-500">
+        レシートの日付が {otherMonths.map(monthLabel).join("・")} のものは、その月に入りました。
+        {otherMonths.map((m) => <button key={m} type="button" className="ml-2 font-semibold text-blue-700 underline" onClick={() => setMonth(m)}>{monthLabel(m)}を見る</button>)}
+      </p>}
+      {batch.failed > 0 && <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+        <span>{batch.failed}枚 保存できませんでした。写真は残っています。</span>
+        <button type="button" className="xr-secondary min-h-0 py-1.5" disabled={batch.waiting > 0} onClick={batch.retry}>もう一度</button>
+      </div>}
+    </section>}
+
     <section className="mt-5 overflow-hidden rounded-2xl bg-white shadow-sm">
       {receipts === null
         ? <p className="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" />読み込み中…</p>
@@ -127,7 +171,10 @@ export function ReceiptBook({ user }: { user: User }) {
               <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setForm({ editing: receipt, file: null })}>
                 <span className="w-10 shrink-0 text-xs tabular-nums text-slate-500">{shortDate(receipt.expenseDate)}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">{receipt.storeName}</span>
+                  <span className="flex items-center gap-1.5">
+                    {receipt.needsReview && <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800"><TriangleAlert size={10} />要確認</span>}
+                    <span className={`truncate text-sm font-semibold ${receipt.storeName ? "" : "text-slate-400"}`}>{receipt.storeName || "（店名が読めませんでした）"}</span>
+                  </span>
                   <span className={`block text-xs ${receipt.category ? "text-slate-500" : "text-slate-400"}`}>{receipt.category || UNSET_CATEGORY}{receipt.memo && `・${receipt.memo}`}</span>
                 </span>
                 <span className="shrink-0 text-sm font-bold tabular-nums">{formatYen(receipt.amount)}</span>
@@ -145,9 +192,40 @@ export function ReceiptBook({ user }: { user: User }) {
           </ul>}
     </section>
 
-    <div className="fixed inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-[var(--background)] via-[var(--background)] to-transparent px-4 pb-5 pt-8">
-      <button type="button" className="xr-primary w-full max-w-sm justify-center shadow-lg" onClick={() => setForm({ editing: null, file: null })}><Plus size={18} />レシートを登録</button>
+    <div className="fixed inset-x-0 bottom-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)] to-transparent px-4 pb-5 pt-8">
+      {/* 写真をまとめて選ぶ（スキャナが使えない端末・撮りためた写真から）。選んだ分は続けて撮ったときと同じく裏で保存する */}
+      <input ref={pickRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(event) => { batch.add([...(event.target.files ?? [])]); event.target.value = ""; }} />
+      {scanError && <p className="mx-auto mb-2 max-w-sm rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{scanError}　写真を選んで取り込めます。</p>}
+      <div className="mx-auto flex max-w-sm gap-2">
+        {desktop
+          ? <button type="button" className="xr-primary flex-1 justify-center shadow-lg" onClick={() => setForm({ editing: null, file: null })}><Plus size={18} />レシートを登録</button>
+          : <>
+            <button
+              type="button"
+              className="xr-primary flex-1 justify-center shadow-lg"
+              onClick={() => {
+                // 押した流れのまま開く。開けない端末（http・古い端末）は写真を選ぶほうへ
+                if (!scanError && isScannerAvailable()) { setShots(0); setScanning(true); return; }
+                pickRef.current?.click();
+              }}
+            ><Camera size={18} />続けて撮る</button>
+            <button type="button" className="xr-secondary justify-center shadow-lg" onClick={() => pickRef.current?.click()} aria-label="写真から選ぶ"><Images size={18} />写真から</button>
+            <button type="button" className="xr-secondary justify-center shadow-lg" onClick={() => setForm({ editing: null, file: null })} aria-label="1枚だけ確かめながら登録"><Plus size={18} />1枚</button>
+          </>}
+      </div>
     </div>
+
+    {scanning && <ReceiptScanner
+      continuous
+      capturedCount={shots}
+      onCapture={(file) => { setShots((n) => n + 1); batch.add([file]); }}
+      onClose={() => { setScanning(false); void loadQuota(); }}
+      onUnavailable={(reason) => {
+        // 権限拒否など。ここから input.click() しても iOS は操作と認めないので、押してもらう案内を出す
+        setScanning(false);
+        setScanError(reason);
+      }}
+    />}
 
     {form && <ReceiptForm
       uid={user.uid}

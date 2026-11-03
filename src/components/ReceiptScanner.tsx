@@ -152,11 +152,25 @@ const CAPTURE_MAX_SIDE = 1600;
  */
 const STUCK_FRAMES = 80;
 
+/**
+ * 続けて撮るとき、撮ったあと「レシートが画面から外れた」とみなすコマ数（100ms ごとなので 0.8秒）。
+ * 撮った直後は同じレシートがまだ写っているので、外れるまで自動では撮らない（同じ1枚を2回撮らない）。
+ * 短いと、ピントが一瞬揺れただけで外れたとみなし、同じ1枚をもう一度撮ってしまう。
+ */
+const SWAP_FRAMES = 8;
+
 type Props = {
   onCapture: (file: File) => void;
   onClose: () => void;
   /** カメラを開けなかったとき。呼び出し側は従来のファイル選択へ切り替える */
   onUnavailable: (reason: string) => void;
+  /**
+   * 続けて撮る。撮ったあともカメラを開いたままにして、次のレシートに置き換わったらまた自動で撮る。
+   * カメラを1枚ごとに開き直すと、Safari の「カメラへのアクセスが許可されています」が毎回出る（2026-11-03 XenoReceipt で追加）。
+   */
+  continuous?: boolean;
+  /** 続けて撮った枚数（見出しに出す） */
+  capturedCount?: number;
 };
 
 const RING_COLOR: Record<ScanQuality, string> = {
@@ -169,7 +183,7 @@ const RING_COLOR: Record<ScanQuality, string> = {
   ready: "#22c55e",
 };
 
-export function ReceiptScanner({ onCapture, onClose, onUnavailable }: Props) {
+export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous = false, capturedCount = 0 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -203,10 +217,17 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable }: Props) {
    */
   const onCaptureRef = useRef(onCapture);
   const onUnavailableRef = useRef(onUnavailable);
+  const continuousRef = useRef(continuous);
   useEffect(() => {
     onCaptureRef.current = onCapture;
     onUnavailableRef.current = onUnavailable;
+    continuousRef.current = continuous;
   });
+  /** 続けて撮るとき、撮った1枚が画面から外れるのを待っているか。待っている間は自動で撮らない */
+  const awaitingSwapRef = useRef(false);
+  /** 外れたとみなすまでに数える、レシートの写っていないコマ数 */
+  const awayFramesRef = useRef(0);
+  const [awaitingSwap, setAwaitingSwap] = useState(false);
   /**
    * 数値表示を開いているか。
    * 解析ループの依存に入れると、開閉のたびにループを張り直すことになるので
@@ -280,7 +301,20 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable }: Props) {
             return;
           }
           const file = new File([blob], `receipt-${Date.now()}.jpg`, { type: "image/jpeg" });
-          const send = () => onCaptureRef.current(file);
+          const send = () => {
+            onCaptureRef.current(file);
+            if (!continuousRef.current) return;
+            // 続けて撮る：カメラは開いたまま、次のレシートに置き換わるのを待つ
+            capturedRef.current = false;
+            setCapturing(false);
+            stableRef.current = 0;
+            focusHistoryRef.current = [];
+            settledRef.current = false;
+            awaitingSwapRef.current = true;
+            awayFramesRef.current = 0;
+            setAwaitingSwap(true);
+            setProgress(0);
+          };
           if (!sourceContext) {
             send();
             return;
@@ -619,6 +653,18 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable }: Props) {
         }
       }
 
+      if (awaitingSwapRef.current) {
+        // 撮った1枚がまだ写っている。レシートが外れたコマが続いたら、次を撮れるようにする
+        awayFramesRef.current = result.quality === "ready" ? 0 : awayFramesRef.current + 1;
+        if (awayFramesRef.current >= SWAP_FRAMES) {
+          awaitingSwapRef.current = false;
+          setAwaitingSwap(false);
+        }
+        stableRef.current = 0;
+        setProgress(0);
+        return;
+      }
+
       if (result.quality === "ready") {
         stableRef.current += 1;
         stuckRef.current = 0;
@@ -657,15 +703,17 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable }: Props) {
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black">
       <div className="flex items-center justify-between px-4 py-3">
-        <div className="text-sm font-extrabold text-white">レシートを撮影</div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="閉じる"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white"
-        >
-          <X className="h-5 w-5" strokeWidth={2.4} />
-        </button>
+        <div className="text-sm font-extrabold text-white">{continuous ? `続けて撮る（${capturedCount}枚）` : "レシートを撮影"}</div>
+        {continuous
+          ? <button type="button" onClick={onClose} className="inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-extrabold text-black">終わる</button>
+          : <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white"
+          >
+            <X className="h-5 w-5" strokeWidth={2.4} />
+          </button>}
       </div>
 
       <div className="relative flex-1 overflow-hidden">
@@ -696,7 +744,7 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable }: Props) {
             className="h-3 w-3 shrink-0 rounded-full"
             style={{ backgroundColor: RING_COLOR[quality] }}
           />
-          {capturing ? "撮影しています…" : QUALITY_MESSAGE[quality]}
+          {capturing ? "撮影しています…" : awaitingSwap ? `${capturedCount}枚目を撮りました。次のレシートに置き換えてください` : QUALITY_MESSAGE[quality]}
         </div>
         {/* 自動撮影までの進み具合。いきなり撮られた感じにしない */}
         <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/20">
