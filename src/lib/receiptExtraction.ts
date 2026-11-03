@@ -5,10 +5,22 @@
  * これが正本になる。プロンプトがこの機能の本体なので、直したら ProcNova にも配ること。
  * 建設現場向けの言い回しだけ外し、一般の経費のレシートとして読ませている。
  */
+import type { Reasoning } from "openai/resources/shared";
+
 import { openai } from "@/lib/openai";
 import { categoryInstructions } from "@/lib/receiptCategory";
 
 const MODELS = ["gpt-5.6-terra", "gpt-5.4", "gpt-5.1"];
+
+/*
+ * 答える前に考える量。指定しないと中くらい考えるので待ちが長い。
+ * 2026-11-03 に実物のレシート3枚（値引きのあるドラッグストア・飲食店・8%の飲み物）を3回ずつ読み比べた：
+ *   none … 1.5〜2.6秒。9回とも合計・税の区分・費目が正しい
+ *   low  … 1.6〜5.5秒。値引きのあるレシートで税の区分と費目が空になった回が2回、費目が空の回がもう1回
+ * 考えさせても良くならず遅くなるだけだったので none。どのモデルも none を受け付ける（minimal は gpt-5.1 が断る）。
+ */
+// SDK 5.x の型には "none" が無いが、API は受け付ける（2026-11-03 に実際に呼んで確かめた）。SDK を上げたらこの書き換えは外す
+const REASONING = { effort: "none" } as unknown as Reasoning;
 
 /**
  * レシート写真から【店舗名・利用日・合計金額】の3項目だけを読み取る。
@@ -355,6 +367,7 @@ export async function runExtraction(
             },
           },
           max_output_tokens: 2000,
+          reasoning: REASONING,
         },
         { timeout: 60_000 },
       );

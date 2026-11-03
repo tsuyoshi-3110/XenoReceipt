@@ -8,3 +8,7 @@ next-env.d.ts
 .DS_Store
 .firebase/
 *.log
+
+# 読み比べ用のレシートの写真（個人の買い物が写るので git に入れない）
+test-receipts/
+.claude/iphone-dev-qr.png
