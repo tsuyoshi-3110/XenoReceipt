@@ -38,8 +38,11 @@ export function ReceiptBook({ user }: { user: User }) {
   const [scanError, setScanError] = useState("");
   /** 2枚以上を読み取って確かめる画面に渡す写真 */
   const [reviewFiles, setReviewFiles] = useState<File[] | null>(null);
-  /** 保存したうち、いま見ている月ではない日付だったもの。消えたように見えないよう知らせる */
-  const [otherMonths, setOtherMonths] = useState<string[]>([]);
+  /**
+   * まとめて保存した枚数を、月ごとに。一覧は月ごとなので、ほかの月の日付のものはいま見ている月に出ない。
+   * 小さな文で知らせていたら気づかれず「1件しか登録されていない」と思われた（2026-11-03）ので、画面の上にはっきり出す。
+   */
+  const [savedSummary, setSavedSummary] = useState<{ month: string; count: number }[] | null>(null);
   const pickRef = useRef<HTMLInputElement | null>(null);
   const desktop = useDesktopPointer();
 
@@ -114,6 +117,20 @@ export function ReceiptBook({ user }: { user: User }) {
       </div>
     </header>
 
+    {savedSummary && <section className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-bold">
+          {savedSummary.reduce((sum, row) => sum + row.count, 0)}枚 保存しました：
+          {savedSummary.map((row) => `${monthLabel(row.month)}に${row.count}枚`).join("・")}
+        </p>
+        <button type="button" className="shrink-0 text-xs text-blue-700 underline" onClick={() => setSavedSummary(null)}>閉じる</button>
+      </div>
+      {savedSummary.some((row) => row.month !== month) && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <span>一覧は月ごとです。ほかの月の分はその月を開くと見られます。</span>
+        {savedSummary.filter((row) => row.month !== month).map((row) => <button key={row.month} type="button" className="xr-secondary min-h-0 px-3 py-1.5 text-xs" onClick={() => setMonth(row.month)}>{monthLabel(row.month)}を見る</button>)}
+      </div>}
+    </section>}
+
     <section className="mt-5 rounded-2xl bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <button type="button" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="前の月" onClick={() => setMonth(shiftMonth(month, -1))}><ChevronLeft size={18} /></button>
@@ -142,11 +159,7 @@ export function ReceiptBook({ user }: { user: User }) {
       {exportError && <p className="mt-2 text-right text-xs font-semibold text-red-600">{exportError}</p>}
     </section>
 
-    {otherMonths.length > 0 && <section className="mt-5 flex flex-wrap items-center gap-2 rounded-2xl bg-white p-4 text-xs text-slate-600 shadow-sm">
-      <span>レシートの日付が {otherMonths.map(monthLabel).join("・")} のものは、その月に入りました。</span>
-      {otherMonths.map((m) => <button key={m} type="button" className="font-semibold text-blue-700 underline" onClick={() => { setMonth(m); setOtherMonths([]); }}>{monthLabel(m)}を見る</button>)}
-      <button type="button" className="ml-auto text-slate-400 underline" onClick={() => setOtherMonths([])}>閉じる</button>
-    </section>}
+
 
     <section className="mt-5 overflow-hidden rounded-2xl bg-white shadow-sm">
       {receipts === null
@@ -219,10 +232,11 @@ export function ReceiptBook({ user }: { user: User }) {
       onSaved={(dates) => {
         setReviewFiles(null);
         void loadQuota();
-        const months = [...new Set(dates.map((date) => date.slice(0, 7)))];
-        if (months.includes(month)) void load();
-        else if (months.length === 1) { setMonth(months[0]); return; }
-        setOtherMonths(months.filter((m) => m !== month));
+        const counts = new Map<string, number>();
+        for (const date of dates) counts.set(date.slice(0, 7), (counts.get(date.slice(0, 7)) ?? 0) + 1);
+        // 新しい月から並べる
+        setSavedSummary([...counts].map(([m, count]) => ({ month: m, count })).sort((a, b) => b.month.localeCompare(a.month)));
+        void load();
       }}
     />}
 

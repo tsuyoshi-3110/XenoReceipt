@@ -262,6 +262,8 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous =
   const stuckRef = useRef(0);
   const [stuck, setStuck] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  /** 撮った合図の光。撮るたびに数を増やし、その数を key にして光をもう一度出す */
+  const [flash, setFlash] = useState(0);
 
   /**
    * 今の映像から静止画を作る。検出できていれば、その範囲＋余白で切り抜く。
@@ -272,6 +274,8 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous =
     if (!video || capturedRef.current) return;
     capturedRef.current = true;
     setCapturing(true);
+    // 撮った瞬間に画面を白く光らせる。続けて撮るとき、撮れたことが音なしでも分かるように
+    setFlash((n) => n + 1);
 
     const fullWidth = video.videoWidth;
     const fullHeight = video.videoHeight;
@@ -727,6 +731,7 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous =
           className="h-full w-full object-contain"
         />
         <canvas ref={overlayRef} className="pointer-events-none absolute inset-0 h-full w-full" />
+        {flash > 0 && <div key={flash} className="xr-flash pointer-events-none absolute inset-0 bg-white" />}
 
         {!ready && (
           <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm font-bold text-white">
