@@ -1,15 +1,6 @@
 "use client";
 
-import {
-  GoogleAuthProvider,
-  getRedirectResult,
-  onAuthStateChanged,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  signInWithRedirect,
-  type User,
-} from "firebase/auth";
+import { onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, type User } from "firebase/auth";
 import { Loader2, Receipt } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -18,29 +9,13 @@ import { auth } from "@/lib/firebaseClient";
 
 /** ログインに失敗した理由。何が起きたか分からないと、押し直すしかなくなる */
 function loginErrorMessage(code: string | undefined): string {
-  if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return "";
-  if (code === "auth/popup-blocked") return "ログインの窓が開けませんでした。ポップアップを許可して、もう一度押してください。";
-  if (code === "auth/unauthorized-domain") return `このアドレス（${window.location.hostname}）からはログインできません。本番のアドレスから開いてください。`;
   if (code === "auth/network-request-failed") return "通信できませんでした。電波のよい所で、もう一度お試しください。";
   if (code === "auth/invalid-email") return "メールアドレスの形が正しくありません。";
   if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") return "メールアドレスかパスワードが違います。";
-  // 新しい利用者の登録は Firebase で止めてある（2026-11-03 身内だけで使う）。使ったことのない Google アカウントもここに来る
+  // 新しい利用者の登録は Firebase で止めてある（2026-11-03 身内だけで使う）
   if (code === "auth/admin-restricted-operation") return "このアカウントは登録されていません。使いたいときは、管理者に登録を頼んでください。";
   if (code === "auth/too-many-requests") return "続けて失敗したので、しばらく止めています。少し待ってからお試しください。";
-  if (code === "auth/account-exists-with-different-credential") return "このメールアドレスは Google で登録されています。「Google でログイン」を押してください。";
   return "ログインできませんでした。もう一度お試しください。";
-}
-
-/**
- * 窓を開かず、画面ごと Google へ移ってログインするか。
- * ホーム画面から開いた iPhone のアプリは、別の窓（ポップアップ）を開くとその結果が戻らない。
- * スマホは Safari でも窓の扱いが不安定なので、PC（マウスで操作する端末）以外は画面ごと移る。
- */
-function shouldRedirect(): boolean {
-  const standalone = window.matchMedia("(display-mode: standalone)").matches
-    || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  const desktop = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-  return standalone || !desktop;
 }
 
 export default function Home() {
@@ -57,10 +32,6 @@ export default function Home() {
     auth.languageCode = "ja";
     return onAuthStateChanged(auth, setUser);
   }, []);
-  // 画面ごと Google へ移ってログインして戻ってきたとき、失敗していれば理由を出す（成功なら onAuthStateChanged が受け取る）
-  useEffect(() => {
-    getRedirectResult(auth).catch((cause: { code?: string }) => setError(loginErrorMessage(cause?.code)));
-  }, []);
 
   if (user === undefined) {
     return <main className="grid min-h-dvh place-items-center"><Loader2 className="animate-spin text-slate-400" /></main>;
@@ -68,8 +39,9 @@ export default function Home() {
   if (user) return <ReceiptBook user={user} />;
 
   /*
-   * メールアドレスとパスワードのログイン（2026-11-03）。ホーム画面から開いた iPhone のアプリでは、
-   * Google のログインの行き来がうまくいかないことがあるので、画面を移らずに入れる方法を並べる。
+   * メールアドレスとパスワードのログインだけにする（2026-11-03）。Google のログインは、ホーム画面から開いた
+   * iPhone のアプリで行き来の結果が戻らないことがあり、ボタンを外した。Google で作ったアカウントも、
+   * 「パスワードを忘れたとき」でパスワードを決めれば、同じアカウントのまま入れる。
    * 自分でアカウントは作れない（身内だけで使う。Firebase で新しい利用者の登録を止めてある）。
    * アカウントは管理者が Firebase コンソールの「ユーザーを追加」で作る。パスワードを忘れたら再設定のメールで決め直す。
    */
@@ -105,24 +77,10 @@ export default function Home() {
           <h1 className="text-xl font-bold">XenoReceipt</h1>
           <p className="mt-2 text-sm text-slate-500">レシートを撮るだけで、店名・日付・金額・費目が入ります。月ごとに Excel と PDF で書き出せます。</p>
         </div>
-        <button
-          type="button"
-          className="xr-primary w-full justify-center"
-          disabled={busy}
-          onClick={() => {
-            setError(""); setNotice("");
-            const provider = new GoogleAuthProvider();
-            const signIn = shouldRedirect() ? signInWithRedirect(auth, provider) : signInWithPopup(auth, provider);
-            signIn.catch((cause: { code?: string }) => setError(loginErrorMessage(cause?.code)));
-          }}
-        >Google でログイン</button>
-
-        <div className="flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-200" />またはメールアドレスで<span className="h-px flex-1 bg-slate-200" /></div>
-
         <form className="space-y-3 text-left" onSubmit={(event) => { event.preventDefault(); void login(); }}>
           <input className="xr-input" type="email" autoComplete="email" inputMode="email" placeholder="メールアドレス" aria-label="メールアドレス" value={email} disabled={busy} onChange={(event) => setEmail(event.target.value)} />
           <input className="xr-input" type="password" autoComplete="current-password" placeholder="パスワード" aria-label="パスワード" value={password} disabled={busy} onChange={(event) => setPassword(event.target.value)} />
-          <button type="submit" className="xr-secondary w-full justify-center" disabled={busy}>{busy && <Loader2 size={15} className="animate-spin" />}ログイン</button>
+          <button type="submit" className="xr-primary w-full justify-center" disabled={busy}>{busy && <Loader2 size={15} className="animate-spin" />}ログイン</button>
           <button type="button" className="text-xs text-blue-700 underline" disabled={busy} onClick={() => void resetPassword()}>パスワードを忘れたとき</button>
         </form>
 
