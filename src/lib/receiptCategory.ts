@@ -16,6 +16,8 @@ export function categoryInstructions(categories: string[]): string {
   if (categories.length === 0) return "";
   const entertainment = categories.find((name) => name.includes("交際"));
   const welfare = categories.find((name) => name.includes("福利厚生"));
+  const material = categories.find((name) => name.includes("材料"));
+  const packaging = categories.find((name) => name.includes("包装"));
   const pick = (name: string | undefined) => (name ? `「${name}」` : `空文字 ""（候補に合う費目が無いため）`);
   return `
 あわせて、この経費の費目を次の候補から1つだけ選び、category に入れてください。
@@ -23,8 +25,14 @@ export function categoryInstructions(categories: string[]): string {
 - 店名と、レシートに印字されている内容（何の支払いか）から判断する。
   例：電話・インターネットの料金 → 通信費／ガソリン・駐車場・高速道路 → 車両費や旅費交通費／文房具・日用品 → 消耗品費／振込手数料 → 支払手数料
 - 飲食店（寿司・焼肉・居酒屋・レストラン・カフェなど、店で食事や飲食をした）→ ${pick(entertainment)}
-- コンビニ・スーパー・自動販売機などで、飲み物・お茶・コーヒー・水を買った（ウォーターサーバー代も含む）→ ${pick(welfare)}
-- 上の2つ（飲食店・飲み物）は、書いたとおりにする。ほかの費目（会議費・消耗品費など）で代用しない。
+${material
+    /*
+     * 材料費が候補にあるのは、食べ物を作って売る店（クレープ屋など）。スーパーで買う牛乳・果物・飲み物は
+     * 売り物の材料なので、福利厚生費に寄せると帳簿が狂う。食品・飲み物はまとめて材料費にする。
+     */
+    ? `- スーパー・業務用の食材店・製菓材料店・青果店・コンビニなどで、食品・飲み物・果物・乳製品・粉・砂糖・油などを買った → 「${material}」`
+    : `- コンビニ・スーパー・自動販売機などで、飲み物・お茶・コーヒー・水を買った（ウォーターサーバー代も含む）→ ${pick(welfare)}`}
+${packaging ? `- 容器・カップ・紙袋・包装紙・ラップ・ストロー・紙ナプキン・シール・ラベルなど、売り物を包む・渡すための品を買った → 「${packaging}」\n` : ""}- 上の${packaging ? "3つ" : "2つ"}は、書いたとおりにする。ほかの費目（会議費・消耗品費など）で代用しない。
 - それ以外で、例に出した費目が候補に無ければ、候補の中でいちばん近いものを選ぶ。
-- 決めきれないとき（コンビニで弁当や食べ物が中心、など）は空文字 "" にする。迷って「その他」を選ばない。`;
+- 決めきれないとき${material ? "" : "（コンビニで弁当や食べ物が中心、など）"}は空文字 "" にする。迷って「その他」を選ばない。`;
 }

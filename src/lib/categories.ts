@@ -4,10 +4,13 @@
  * 「雑費」を入れていないのは、迷ったときの逃げ場にさせないため（receiptCategory の指示と同じ考え）。
  */
 export const EXPENSE_CATEGORIES = [
+  // クレープ屋で使うので、材料・包装・消耗品を先頭に置く（2026-11-03）
+  "材料費",
+  "包装資材費",
+  "消耗品費",
   "旅費交通費",
   "車両費",
   "通信費",
-  "消耗品費",
   "事務用品費",
   "接待交際費",
   "会議費",
@@ -24,3 +27,6 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 export const UNSET_CATEGORY = "未設定";
+
+/** 新しく登録するときの費目。AI が決めきれなかったときもこのまま残る */
+export const DEFAULT_CATEGORY = "消耗品費";

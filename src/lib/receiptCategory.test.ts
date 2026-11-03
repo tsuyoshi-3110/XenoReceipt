@@ -16,6 +16,13 @@ test("福利厚生費が候補に無ければ、飲み物は空欄にさせる�
   assert.match(lineOf(text, "- 飲食店"), /→ 「接待交際費」$/);
 });
 
+test("材料費があれば、食品・飲み物は材料費、容器・袋は包装資材費を選ばせる（福利厚生費に寄せない）", () => {
+  const text = categoryInstructions(["材料費", "包装資材費", "消耗品費", "福利厚生費"]);
+  assert.match(lineOf(text, "- スーパー"), /→ 「材料費」$/);
+  assert.match(lineOf(text, "- 容器"), /→ 「包装資材費」$/);
+  assert.equal(lineOf(text, "- コンビニ"), "");
+});
+
 test("候補が無ければ（現場経費）費目の指示を出さない", () => {
   assert.equal(categoryInstructions([]), "");
 });

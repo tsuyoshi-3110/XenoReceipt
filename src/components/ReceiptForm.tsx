@@ -9,7 +9,7 @@ import { ReceiptCropEditor, receiptSourceOf, type ReceiptSource } from "@/compon
 import { ReceiptScanner } from "@/components/ReceiptScanner";
 import { useDesktopPointer } from "@/components/useDesktopPointer";
 import { useFileDrop } from "@/components/useFileDrop";
-import { EXPENSE_CATEGORIES } from "@/lib/categories";
+import { DEFAULT_CATEGORY, EXPENSE_CATEGORIES } from "@/lib/categories";
 import { formatYen } from "@/lib/format";
 import { blobToDataUrl, isPdfFile, normalizeReceiptImage, readReceipt, todayLocal } from "@/lib/receiptImage";
 import { createReceipt, receiptImageUrl, updateReceipt, type Receipt, type ReceiptFields } from "@/lib/receipts";
@@ -39,8 +39,8 @@ export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Pro
   const [storeName, setStoreName] = useState(editing?.storeName ?? "");
   const [amount, setAmount] = useState(editing?.amount ?? 0);
   const [memo, setMemo] = useState(editing?.memo ?? "");
-  // 費目は空から始める。AI が決めきれないレシートに関係ない費目が付くと、毎回直す手間になる
-  const [category, setCategory] = useState(editing?.category ?? "");
+  // 新しく登録するときは消耗品費から始める。AI が決めきれなかったときもそのまま残る（クレープ屋の買い物はほぼ材料・包装・消耗品）
+  const [category, setCategory] = useState(editing ? editing.category : DEFAULT_CATEGORY);
   /** 費目を AI が選んだか。人が選び直したら消す */
   const [categorySuggested, setCategorySuggested] = useState(false);
   const [taxRate, setTaxRate] = useState(editing?.taxRate ?? 10);
