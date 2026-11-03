@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // レシートは本人だけが読み書きする
+    match /users/{uid}/receipts/{receiptId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.storeName is string
+        && request.resource.data.expenseDate is string
+        && request.resource.data.amount is int
+        && request.resource.data.amount >= 0;
+    }
+    // AI の読み取り回数。サーバー（Admin SDK）だけが書く。本人は読むだけ
+    match /users/{uid}/aiUsage/{month} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}
