@@ -30,7 +30,8 @@ export function ReceiptBook({ user }: { user: User }) {
   const [form, setForm] = useState<FormState>(null);
   const [exporting, setExporting] = useState("");
   const [exportError, setExportError] = useState("");
-  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
+  /** 今月 AI で読んだ回数（止めはしない。費用の目安） */
+  const [quota, setQuota] = useState<{ used: number } | null>(null);
   /** スキャナを開いているか。開いているあいだに撮った写真（「完了」で読み取りへ回す） */
   const [scanning, setScanning] = useState(false);
   const [shots, setShots] = useState<File[]>([]);
@@ -66,7 +67,7 @@ export function ReceiptBook({ user }: { user: User }) {
     try {
       const token = await user.getIdToken();
       const response = await fetch("/api/receipt-extract", { headers: { authorization: `Bearer ${token}` } });
-      const data = (await response.json()) as { ok?: boolean; quota?: { used: number; limit: number } };
+      const data = (await response.json()) as { ok?: boolean; quota?: { used: number } };
       if (data.ok && data.quota) setQuota(data.quota);
     } catch {
       // 残りの回数は目安なので、読めなくても一覧は出す
@@ -119,7 +120,7 @@ export function ReceiptBook({ user }: { user: User }) {
     <header className="flex items-center justify-between gap-3">
       <h1 className="text-lg font-bold">XenoReceipt</h1>
       <div className="flex items-center gap-3 text-xs text-slate-500">
-        {quota && <span className="flex items-center gap-1"><Sparkles size={12} />今月の読み取り 残り {Math.max(0, quota.limit - quota.used)}回</span>}
+        {quota && <span className="flex items-center gap-1"><Sparkles size={12} />今月の読み取り {quota.used}回</span>}
         <button type="button" className="underline" onClick={() => void signOut(auth)}>ログアウト</button>
       </div>
     </header>

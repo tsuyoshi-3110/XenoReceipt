@@ -3,19 +3,14 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebaseAdmin";
 
 /*
- * AI でレシートを読む回数の枠（1人・1か月）。
+ * AI でレシートを読んだ回数（1人・1か月）。
  *
- * XenoCoin の課金を入れるまでの仮の歯止め。ログインだけで通すと、
- * アカウントを増やすほど AI の費用がかさむので、人ごとに月の回数で止める。
+ * 身内だけで使い、新しい利用者の登録も止めてあるので、回数で止めることはしない（2026-11-03 ユーザー指定で上限を外した）。
+ * AI の費用の目安として数えるだけ残す。人を広く入れるときは、ここで止めるか XenoCoin の課金にする。
  * 回数は users/{uid}/aiUsage/{YYYY-MM} にサーバーだけが書く（ルールで本人の書き込みを断っている）。
  */
 
-export type Quota = { used: number; limit: number };
-
-export function monthlyLimit(): number {
-  const value = Number(process.env.RECEIPT_MONTHLY_LIMIT);
-  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 50;
-}
+export type Quota = { used: number };
 
 /** 日本時間の YYYY-MM。月の切り替わりを日本の0時にそろえる */
 export function monthKeyJst(now: Date = new Date()): string {
@@ -30,21 +25,12 @@ function usageRef(uid: string) {
 export async function readQuota(uid: string): Promise<Quota> {
   const snap = await usageRef(uid).get();
   const used = Number(snap.get("receiptReads") ?? 0);
-  return { used: Number.isFinite(used) ? used : 0, limit: monthlyLimit() };
+  return { used: Number.isFinite(used) ? used : 0 };
 }
 
-/**
- * 呼ぶ直前に1回ぶん確保する。枠を超えていたら null。
- * 読み取りに失敗しても戻さない（AI は呼んでいるので費用はかかっている。何度でも撮り直せる穴を作らない）。
- */
-export async function consumeQuota(uid: string): Promise<Quota | null> {
-  const limit = monthlyLimit();
-  const ref = usageRef(uid);
-  return adminDb().runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const used = Number(snap.get("receiptReads") ?? 0) || 0;
-    if (used >= limit) return null;
-    tx.set(ref, { receiptReads: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return { used: used + 1, limit };
-  });
+/** AI を呼ぶたびに1回数える。数えられなくても読み取りは止めない（目安なので） */
+export async function countRead(uid: string): Promise<void> {
+  await usageRef(uid)
+    .set({ receiptReads: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+    .catch((error) => console.error("[receipt-extract] 読み取りの回数を数えられませんでした", error));
 }
