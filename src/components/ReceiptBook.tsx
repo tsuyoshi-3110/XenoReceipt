@@ -112,7 +112,8 @@ export function ReceiptBook({ user }: { user: User }) {
     }
   }
 
-  return <main className="relative mx-auto min-h-dvh max-w-3xl px-4 pb-24 pt-6" {...drop.handlers}>
+  // 上下は iPhone の安全な範囲（セーフエリア）の分も空ける。下は固定のボタンに一覧の終わりが隠れないだけ空ける
+  return <main className="relative mx-auto min-h-dvh max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[calc(1.5rem+env(safe-area-inset-top))]" {...drop.handlers}>
     {drop.dragging && <FileDropOverlay label="ここで離すと、レシートを取り込みます" rounded="rounded-none" />}
 
     <header className="flex items-center justify-between gap-3">
@@ -217,7 +218,7 @@ export function ReceiptBook({ user }: { user: User }) {
           </ul>}
     </section>
 
-    <div className="fixed inset-x-0 bottom-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)] to-transparent px-4 pb-5 pt-8">
+    <div className="fixed inset-x-0 bottom-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)] to-transparent px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-8">
       {/* 撮りためた写真から選ぶ（スキャナの「写真から」・スキャナが使えない端末）。1枚でも何枚でも */}
       <input ref={pickRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(event) => { const picked = [...(event.target.files ?? [])]; event.target.value = ""; setScanning(false); takeFiles([...shots, ...picked]); setShots([]); }} />
       {scanError && <p className="mx-auto mb-2 max-w-sm rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{scanError}　写真を選んで取り込めます。</p>}

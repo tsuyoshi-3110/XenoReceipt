@@ -708,7 +708,7 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous =
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black">
-      <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
         <div className="text-sm font-extrabold text-white">{continuous && capturedCount > 0 ? `${capturedCount}枚 撮りました` : "レシートを撮影"}</div>
         {continuous
           ? <button type="button" onClick={onClose} className="inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-extrabold text-black">{capturedCount > 0 ? "完了" : "やめる"}</button>
@@ -790,7 +790,7 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous =
         </button>
       </div>
 
-      <div className="flex items-center justify-between gap-3 px-4 pb-6 pt-1">
+      <div className="flex items-center justify-between gap-3 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-1">
         <label className="flex items-center gap-2 text-xs font-bold text-white/80">
           <input
             type="checkbox"

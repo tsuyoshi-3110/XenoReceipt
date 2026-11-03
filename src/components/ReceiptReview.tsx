@@ -173,7 +173,7 @@ export function ReceiptReview({ uid, files, onClose, onSaved }: {
   }
 
   return <div className="fixed inset-0 z-[100] flex flex-col bg-[var(--background)]" role="dialog" aria-modal="true" aria-label="読み取った結果">
-    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
       <div>
         <h2 className="font-bold">読み取った結果を確かめる</h2>
         <p className="text-xs text-slate-500">{reading ? `読み取っています…（${drafts.filter((d) => d.status !== "reading").length}/${drafts.length}枚）` : "違う所だけ直して、下の「保存」を押してください。"}</p>
@@ -181,7 +181,7 @@ export function ReceiptReview({ uid, files, onClose, onSaved }: {
       <button type="button" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="閉じる" onClick={close}><X size={20} /></button>
     </div>
 
-    <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 pb-28">
+    <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 pb-[calc(7rem+env(safe-area-inset-bottom))]">
       {drafts.map((draft, index) => <li
         key={draft.key}
         className={`rounded-2xl bg-white p-3 shadow-sm ${draft.saved ? "opacity-50" : ""} ${draft.attention || draft.saveError ? "ring-2 ring-amber-300" : ""}`}
@@ -230,7 +230,7 @@ export function ReceiptReview({ uid, files, onClose, onSaved }: {
       </li>)}
     </ul>
 
-    <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white px-4 pb-5 pt-3">
+    <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3">
       {error && <p className="mx-auto mb-2 max-w-md text-xs font-semibold text-red-700">{error}</p>}
       <div className="mx-auto flex max-w-md gap-2">
         <button type="button" className="xr-secondary" disabled={saving} onClick={close}>やめる</button>

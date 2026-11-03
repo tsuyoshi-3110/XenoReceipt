@@ -13,6 +13,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#142c8e",
+  // ホーム画面から開いた iPhone で、下のバー（ホームに戻る横線）の高さを env(safe-area-inset-bottom) で読めるようにする。
+  // 読めないと、下に固定したボタンがその横線と重なる（2026-11-03）
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
