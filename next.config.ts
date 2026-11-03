@@ -9,6 +9,17 @@ const nextConfig: NextConfig = {
    * スマホでログインまで試すときは 〇〇.local のほうで開く。その名前は承認済みドメインに足してある。
    */
   allowedDevOrigins: ["192.168.*.*", "*.local"],
+  /*
+   * Google ログインのやり取りを、このアプリと同じアドレスの中で行う（Firebase の案内どおりの中継）。
+   * ホーム画面から開いた iPhone のアプリは Safari と別の入れ物で動くので、xenoreceipt.firebaseapp.com の窓で
+   * ログインしても結果がアプリに戻らなかった（2026-11-03）。本番は authDomain をこのアドレスにしてある（firebaseClient）。
+   */
+  async rewrites() {
+    return [
+      { source: "/__/auth/:path*", destination: "https://xenoreceipt.firebaseapp.com/__/auth/:path*" },
+      { source: "/__/firebase/:path*", destination: "https://xenoreceipt.firebaseapp.com/__/firebase/:path*" },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -1,6 +1,6 @@
 "use client";
 
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, type User } from "firebase/auth";
+import { GoogleAuthProvider, getRedirectResult, onAuthStateChanged, signInWithPopup, signInWithRedirect, type User } from "firebase/auth";
 import { Loader2, Receipt } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -16,12 +16,28 @@ function loginErrorMessage(code: string | undefined): string {
   return "ログインできませんでした。もう一度お試しください。";
 }
 
+/**
+ * 窓を開かず、画面ごと Google へ移ってログインするか。
+ * ホーム画面から開いた iPhone のアプリは、別の窓（ポップアップ）を開くとその結果が戻らない。
+ * スマホは Safari でも窓の扱いが不安定なので、PC（マウスで操作する端末）以外は画面ごと移る。
+ */
+function shouldRedirect(): boolean {
+  const standalone = window.matchMedia("(display-mode: standalone)").matches
+    || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  const desktop = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  return standalone || !desktop;
+}
+
 export default function Home() {
   // undefined＝まだ分からない、null＝ログインしていない
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [error, setError] = useState("");
 
   useEffect(() => onAuthStateChanged(auth, setUser), []);
+  // 画面ごと Google へ移ってログインして戻ってきたとき、失敗していれば理由を出す（成功なら onAuthStateChanged が受け取る）
+  useEffect(() => {
+    getRedirectResult(auth).catch((cause: { code?: string }) => setError(loginErrorMessage(cause?.code)));
+  }, []);
 
   if (user === undefined) {
     return <main className="grid min-h-dvh place-items-center"><Loader2 className="animate-spin text-slate-400" /></main>;
@@ -41,7 +57,9 @@ export default function Home() {
           className="xr-primary w-full justify-center"
           onClick={() => {
             setError("");
-            signInWithPopup(auth, new GoogleAuthProvider()).catch((cause: { code?: string }) => setError(loginErrorMessage(cause?.code)));
+            const provider = new GoogleAuthProvider();
+            const signIn = shouldRedirect() ? signInWithRedirect(auth, provider) : signInWithPopup(auth, provider);
+            signIn.catch((cause: { code?: string }) => setError(loginErrorMessage(cause?.code)));
           }}
         >Google でログイン</button>
         {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
