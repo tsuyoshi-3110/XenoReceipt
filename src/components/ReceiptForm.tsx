@@ -12,7 +12,7 @@ import { useFileDrop } from "@/components/useFileDrop";
 import { DEFAULT_CATEGORY, EXPENSE_CATEGORIES } from "@/lib/categories";
 import { formatYen } from "@/lib/format";
 import { blobToDataUrl, isPdfFile, normalizeReceiptImage, readReceipt, todayLocal } from "@/lib/receiptImage";
-import { createReceipt, receiptImageUrl, updateReceipt, type Receipt, type ReceiptFields } from "@/lib/receipts";
+import { ReceiptImageUploadError, createReceipt, receiptImageUrl, updateReceipt, type Receipt, type ReceiptFields } from "@/lib/receipts";
 import { TAX_RATES, exTax, exTaxOf, isMixedTaxReceipt, taxLabel, taxRateFromReceipt } from "@/lib/tax";
 import { isScannerAvailable } from "@/lib/receiptScan";
 
@@ -33,6 +33,17 @@ type Props = {
   onSaved: (expenseDate: string) => void;
   onClose: () => void;
 };
+
+/** 保存に失敗した理由。「通信を確かめて」だけだと、写真の置き場が無いときにも押し直すしかなくなる */
+function saveErrorMessage(cause: unknown): string {
+  if (cause instanceof ReceiptImageUploadError) {
+    if (cause.code === "storage/unauthorized") return "写真を保存する権限がありません。ログインし直してから、もう一度お試しください。";
+    if (cause.code === "storage/retry-limit-exceeded" || cause.code === "storage/canceled") return "写真を送れませんでした。電波のよい所で、もう一度お試しください。";
+    return "写真の保存先につながりませんでした。しばらくしてから、もう一度お試しください。";
+  }
+  if ((cause as { code?: unknown })?.code === "permission-denied") return "保存する権限がありません。ログインし直してから、もう一度お試しください。";
+  return "保存できませんでした。通信を確かめて、もう一度お試しください。";
+}
 
 export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Props) {
   const [expenseDate, setExpenseDate] = useState(editing?.expenseDate || todayLocal());
@@ -199,8 +210,8 @@ export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Pro
       if (editing) await updateReceipt(uid, editing.id, fields);
       else await createReceipt(uid, fields, image, ocrUsed);
       onSaved(fields.expenseDate);
-    } catch {
-      setError("保存できませんでした。通信を確かめて、もう一度お試しください。");
+    } catch (cause) {
+      setError(saveErrorMessage(cause));
       setSaving(false);
     }
   }

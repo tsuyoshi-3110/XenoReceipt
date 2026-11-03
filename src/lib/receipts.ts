@@ -89,6 +89,15 @@ export function receiptExTax(receipt: ReceiptFields): number {
   return exTaxOf(receipt.amount, receipt.taxRate, receipt.taxable10Amount, receipt.taxable8Amount, receipt.taxFreeAmount);
 }
 
+/** 写真を上げられなかった。記録は書いていない（写真の無い記録を残さない） */
+export class ReceiptImageUploadError extends Error {
+  readonly code: string;
+  constructor(cause: unknown) {
+    super("receipt_image_upload_failed");
+    this.code = typeof (cause as { code?: unknown })?.code === "string" ? (cause as { code: string }).code : "";
+  }
+}
+
 /**
  * 新しく登録する。写真を先に上げてから記録を書く（記録だけ残って写真が無い、を作らない）。
  */
@@ -97,7 +106,11 @@ export async function createReceipt(uid: string, fields: ReceiptFields, image: B
   let imagePath = "";
   if (image) {
     imagePath = `users/${uid}/receipts/${docRef.id}.jpg`;
-    await uploadBytes(ref(storage, imagePath), image, { contentType: "image/jpeg" });
+    try {
+      await uploadBytes(ref(storage, imagePath), image, { contentType: "image/jpeg" });
+    } catch (cause) {
+      throw new ReceiptImageUploadError(cause);
+    }
   }
   await setDoc(docRef, {
     ...fields,
