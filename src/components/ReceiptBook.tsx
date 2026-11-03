@@ -1,6 +1,6 @@
 "use client";
 
-import { signOut, type User } from "firebase/auth";
+import { sendEmailVerification, signOut, type User } from "firebase/auth";
 import { Camera, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Loader2, Plus, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -44,6 +44,12 @@ export function ReceiptBook({ user }: { user: User }) {
    */
   const [savedSummary, setSavedSummary] = useState<{ month: string; count: number }[] | null>(null);
   const pickRef = useRef<HTMLInputElement | null>(null);
+  /**
+   * メールアドレスとパスワードで登録して、まだ確認メールのリンクを押していないか。
+   * 確認が済むまでサーバーが AI の読み取りを断るので、ここで先に知らせる（手で入れての登録はできる）。
+   */
+  const [unverified, setUnverified] = useState(() => user.providerData.some((p) => p.providerId === "password") && !user.emailVerified);
+  const [verifyNote, setVerifyNote] = useState("");
   const desktop = useDesktopPointer();
 
   const load = useCallback(async () => {
@@ -116,6 +122,25 @@ export function ReceiptBook({ user }: { user: User }) {
         <button type="button" className="underline" onClick={() => void signOut(auth)}>ログアウト</button>
       </div>
     </header>
+
+    {unverified && <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <p className="font-bold">メールアドレスの確認がまだです</p>
+      <p className="mt-1 text-xs">{user.email} に届いたメールのリンクを押すと、AI の読み取りが使えるようになります。それまでも、手で入れて登録はできます。</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" className="xr-secondary min-h-0 px-3 py-1.5 text-xs" onClick={() => {
+          // リンクを押したあとは、読み直さないと確認済みにならない。新しい鍵も取り直して、サーバーにも確認済みを伝える
+          void user.reload().then(() => user.getIdToken(true)).then(() => {
+            if (user.emailVerified) { setUnverified(false); setVerifyNote(""); void loadQuota(); }
+            else setVerifyNote("まだ確認できていません。メールのリンクを押してから、もう一度押してください。");
+          }).catch(() => setVerifyNote("確かめられませんでした。通信を確かめてください。"));
+        }}>リンクを押した</button>
+        <button type="button" className="xr-secondary min-h-0 px-3 py-1.5 text-xs" onClick={() => {
+          void sendEmailVerification(user).then(() => setVerifyNote("確認のメールを送り直しました。迷惑メールのフォルダも見てください。"))
+            .catch(() => setVerifyNote("送れませんでした。少し待ってからお試しください。"));
+        }}>メールを送り直す</button>
+      </div>
+      {verifyNote && <p className="mt-2 text-xs font-semibold">{verifyNote}</p>}
+    </section>}
 
     {savedSummary && <section className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
       <div className="flex items-start justify-between gap-2">

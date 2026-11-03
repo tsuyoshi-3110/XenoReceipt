@@ -13,23 +13,34 @@ import { MAX_IMAGE_CHARS, normalizeCategories, normalizeDate, runExtraction } fr
 export const runtime = "nodejs";
 export const maxDuration = 90;
 
-async function uidOf(request: Request): Promise<string | null> {
+/**
+ * ログインした人の uid。メールアドレスとパスワードで登録して、まだ確認メールのリンクを押していない人は "unverified"。
+ * 使い捨てのメールでアカウントを増やせば AI を呼び続けられてしまうので、確認が済むまで読み取りは使わせない。
+ */
+async function uidOf(request: Request): Promise<string | "unverified" | null> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return null;
   try {
-    return (await adminAuth().verifyIdToken(token)).uid;
+    const decoded = await adminAuth().verifyIdToken(token);
+    if (decoded.firebase?.sign_in_provider === "password" && decoded.email_verified !== true) return "unverified";
+    return decoded.uid;
   } catch {
     return null;
   }
 }
 
 const unauthorized = () => NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+const unverified = () => NextResponse.json(
+  { ok: false, unreadable: true, unverified: true, error: "メールアドレスの確認が済んでいないので、AI の読み取りは使えません。届いたメールのリンクを押してください（手で入れて登録はできます）。" },
+  { status: 403 },
+);
 
 /** 今月の残りの回数（表示用） */
 export async function GET(request: Request) {
   const uid = await uidOf(request);
   if (!uid) return unauthorized();
+  if (uid === "unverified") return unverified();
   const quota = await readQuota(uid);
   return NextResponse.json({ ok: true, quota }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -37,6 +48,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const uid = await uidOf(request);
   if (!uid) return unauthorized();
+  if (uid === "unverified") return unverified();
 
   const body = (await request.json().catch(() => ({}))) as { image?: unknown; today?: unknown; categories?: unknown };
   const image =
