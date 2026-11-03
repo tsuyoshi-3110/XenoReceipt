@@ -29,6 +29,7 @@ body {
 }
 
 .xr-primary,
+.xr-black,
 .xr-secondary {
   display: inline-flex;
   min-height: 2.75rem;
@@ -56,7 +57,16 @@ body {
   border-color: #94a3b8;
   background: #f8fafc;
 }
+/* ログインのボタン。ロゴ（黒の地に白抜き）に合わせて黒にする */
+.xr-black {
+  background: #000;
+  color: #fff;
+}
+.xr-black:hover {
+  background: #262626;
+}
 .xr-primary:disabled,
+.xr-black:disabled,
 .xr-secondary:disabled {
   cursor: not-allowed;
   opacity: 0.55;

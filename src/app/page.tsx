@@ -80,7 +80,7 @@ export default function Home() {
         <form className="space-y-3 text-left" onSubmit={(event) => { event.preventDefault(); void login(); }}>
           <input className="xr-input" type="email" autoComplete="email" inputMode="email" placeholder="メールアドレス" aria-label="メールアドレス" value={email} disabled={busy} onChange={(event) => setEmail(event.target.value)} />
           <input className="xr-input" type="password" autoComplete="current-password" placeholder="パスワード" aria-label="パスワード" value={password} disabled={busy} onChange={(event) => setPassword(event.target.value)} />
-          <button type="submit" className="xr-primary w-full justify-center" disabled={busy}>{busy && <Loader2 size={15} className="animate-spin" />}ログイン</button>
+          <button type="submit" className="xr-black w-full justify-center" disabled={busy}>{busy && <Loader2 size={15} className="animate-spin" />}ログイン</button>
           <button type="button" className="text-xs text-blue-700 underline" disabled={busy} onClick={() => void resetPassword()}>パスワードを忘れたとき</button>
         </form>
 
