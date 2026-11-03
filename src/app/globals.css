@@ -61,12 +61,3 @@ body {
   cursor: not-allowed;
   opacity: 0.55;
 }
-
-/* 撮った合図の光（ReceiptScanner）。一度白くして、すぐ消す */
-@keyframes xr-flash {
-  from { opacity: 0.85; }
-  to { opacity: 0; }
-}
-.xr-flash {
-  animation: xr-flash 0.35s ease-out forwards;
-}
