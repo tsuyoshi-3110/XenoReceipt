@@ -15,8 +15,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja">
-      <body className="min-h-dvh antialiased">{children}</body>
+    // Safari や拡張機能が読み込み前に html / body へ属性を書き足すことがあり、開発中に食い違いの知らせが出る。この2つだけは見逃す
+    <html lang="ja" suppressHydrationWarning>
+      <body className="min-h-dvh antialiased" suppressHydrationWarning>{children}</body>
     </html>
   );
 }

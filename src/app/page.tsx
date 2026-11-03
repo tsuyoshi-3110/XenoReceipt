@@ -7,6 +7,15 @@ import { useEffect, useState } from "react";
 import { ReceiptBook } from "@/components/ReceiptBook";
 import { auth } from "@/lib/firebaseClient";
 
+/** ログインに失敗した理由。何が起きたか分からないと、押し直すしかなくなる */
+function loginErrorMessage(code: string | undefined): string {
+  if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return "";
+  if (code === "auth/popup-blocked") return "ログインの窓が開けませんでした。ポップアップを許可して、もう一度押してください。";
+  if (code === "auth/unauthorized-domain") return `このアドレス（${window.location.hostname}）からはログインできません。本番のアドレスから開いてください。`;
+  if (code === "auth/network-request-failed") return "通信できませんでした。電波のよい所で、もう一度お試しください。";
+  return "ログインできませんでした。もう一度お試しください。";
+}
+
 export default function Home() {
   // undefined＝まだ分からない、null＝ログインしていない
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -32,7 +41,7 @@ export default function Home() {
           className="xr-primary w-full justify-center"
           onClick={() => {
             setError("");
-            signInWithPopup(auth, new GoogleAuthProvider()).catch(() => setError("ログインできませんでした。もう一度お試しください。"));
+            signInWithPopup(auth, new GoogleAuthProvider()).catch((cause: { code?: string }) => setError(loginErrorMessage(cause?.code)));
           }}
         >Google でログイン</button>
         {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
