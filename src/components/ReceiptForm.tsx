@@ -32,6 +32,12 @@ type Props = {
   /** 保存した利用日。一覧はその月へ移る */
   onSaved: (expenseDate: string) => void;
   onClose: () => void;
+  /**
+   * 何枚かまとめて撮ったときの1枚を、保存する前に詳しく直す。読み取りは済んでいるので読み直さず、
+   * 保存もしない（直した中身を onDraftDone で返し、まとめて保存する画面が保存する）。
+   */
+  draft?: { image: Blob; fields: ReceiptFields; ocrUsed: boolean };
+  onDraftDone?: (fields: ReceiptFields) => void;
 };
 
 /** 保存に失敗した理由。「通信を確かめて」だけだと、写真の置き場が無いときにも押し直すしかなくなる */
@@ -45,33 +51,37 @@ function saveErrorMessage(cause: unknown): string {
   return "保存できませんでした。通信を確かめて、もう一度お試しください。";
 }
 
-export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Props) {
-  const [expenseDate, setExpenseDate] = useState(editing?.expenseDate || todayLocal());
-  const [storeName, setStoreName] = useState(editing?.storeName ?? "");
-  const [amount, setAmount] = useState(editing?.amount ?? 0);
-  const [memo, setMemo] = useState(editing?.memo ?? "");
+export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose, draft, onDraftDone }: Props) {
+  /** 最初に入れておく中身。直すときは保存済みの記録、まとめて撮った1枚なら読み取った結果 */
+  const base: ReceiptFields | null = editing ?? draft?.fields ?? null;
+  /** 写真を撮り直さない（保存済みの記録・読み取り済みの1枚） */
+  const fixedPhoto = Boolean(editing || draft);
+  const [expenseDate, setExpenseDate] = useState(base?.expenseDate || todayLocal());
+  const [storeName, setStoreName] = useState(base?.storeName ?? "");
+  const [amount, setAmount] = useState(base?.amount ?? 0);
+  const [memo, setMemo] = useState(base?.memo ?? "");
   // 新しく登録するときは消耗品費から始める。AI が決めきれなかったときもそのまま残る（クレープ屋の買い物はほぼ材料・包装・消耗品）
-  const [category, setCategory] = useState(editing ? editing.category : DEFAULT_CATEGORY);
+  const [category, setCategory] = useState(base ? base.category : DEFAULT_CATEGORY);
   /** 費目を AI が選んだか。人が選び直したら消す */
   const [categorySuggested, setCategorySuggested] = useState(false);
-  const [taxRate, setTaxRate] = useState(editing?.taxRate ?? 10);
+  const [taxRate, setTaxRate] = useState(base?.taxRate ?? 10);
   /*
    * 税率が混ざっているレシートの内訳。1枚を2件に割ると写真が片方にしか付かないので、
    * 1件のまま内訳を持たせ、税抜は区分ごとに割って足す。ふだんは閉じておく。
    */
-  const [splitTax, setSplitTax] = useState(isMixedTaxReceipt(editing?.taxable10Amount ?? 0, editing?.taxable8Amount ?? 0, editing?.taxFreeAmount ?? 0));
-  const [amount10, setAmount10] = useState(editing?.taxable10Amount ?? 0);
-  const [amount8, setAmount8] = useState(editing?.taxable8Amount ?? 0);
-  const [amountFree, setAmountFree] = useState(editing?.taxFreeAmount ?? 0);
+  const [splitTax, setSplitTax] = useState(isMixedTaxReceipt(base?.taxable10Amount ?? 0, base?.taxable8Amount ?? 0, base?.taxFreeAmount ?? 0));
+  const [amount10, setAmount10] = useState(base?.taxable10Amount ?? 0);
+  const [amount8, setAmount8] = useState(base?.taxable8Amount ?? 0);
+  const [amountFree, setAmountFree] = useState(base?.taxFreeAmount ?? 0);
   /** 保存する写真。直すときは差し替えない（撮り直すなら登録し直す） */
-  const [image, setImage] = useState<Blob | null>(null);
+  const [image, setImage] = useState<Blob | null>(draft?.image ?? null);
   const [previewUrl, setPreviewUrl] = useState("");
   /** 切り抜く前の元の写真。自動の切り抜きがずれたときに「切り抜きを直す」で使う */
   const [source, setSource] = useState<ReceiptSource | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [reading, setReading] = useState(false);
   const [readMessage, setReadMessage] = useState("");
-  const [ocrUsed, setOcrUsed] = useState(editing?.ocrUsed ?? false);
+  const [ocrUsed, setOcrUsed] = useState(editing?.ocrUsed ?? draft?.ocrUsed ?? false);
   /** 読み取ったレシートの合計。内訳の合計と見比べて、合っていなければ知らせる */
   const [readTotal, setReadTotal] = useState(0);
   const [mixedTax, setMixedTax] = useState(false);
@@ -86,6 +96,14 @@ export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Pro
   // 作ったプレビューURLは差し替え・閉じるときに解放する
   const objectUrlRef = useRef("");
   useEffect(() => () => { if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current); }, []);
+
+  // まとめて撮った1枚は、読み取った写真をそのまま出す
+  useEffect(() => {
+    if (!draft) return;
+    const url = URL.createObjectURL(draft.image);
+    queueMicrotask(() => setPreviewUrl(url));
+    return () => URL.revokeObjectURL(url);
+  }, [draft]);
 
   // 直すときは保存済みの写真を出す
   useEffect(() => {
@@ -175,7 +193,7 @@ export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Pro
     const file = files.find((item) => item.type.startsWith("image/") || isPdfFile(item));
     if (!file) { setError("レシートの画像（JPEG・PNG など）か PDF をドラッグしてください。"); return; }
     void chooseReceipt(file);
-  }, !editing && !busy);
+  }, !fixedPhoto && !busy);
 
   /** 内訳を開いているときの合計。開いていなければ打った額をそのまま使う */
   const effectiveAmount = splitTax ? amount10 + amount8 + amountFree : amount;
@@ -205,6 +223,8 @@ export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Pro
       category,
       memo: memo.trim(),
     };
+    // まとめて撮った1枚：ここでは保存せず、直した中身を返す
+    if (draft && onDraftDone) { onDraftDone(fields); return; }
     setSaving(true); setError("");
     try {
       if (editing) await updateReceipt(uid, editing.id, fields);
@@ -231,13 +251,13 @@ export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Pro
   return <div className="fixed inset-0 z-[110] grid place-items-center bg-slate-900/40 p-4" role="dialog" aria-modal="true" aria-label="レシート">
     <div className="flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
       <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-        <h2 className="flex items-center gap-2 font-bold"><ReceiptIcon size={17} className="text-[var(--brand)]" />{editing ? "レシートを直す" : "レシートを登録"}</h2>
+        <h2 className="flex items-center gap-2 font-bold"><ReceiptIcon size={17} className="text-[var(--brand)]" />{editing ? "レシートを直す" : draft ? "読み取った結果を直す" : "レシートを登録"}</h2>
         <button type="button" className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" aria-label="閉じる" onClick={onClose}><X size={18} /></button>
       </div>
 
       <div className="relative min-h-0 flex-1 space-y-4 overflow-y-auto p-5" {...drop.handlers}>
         {drop.dragging && <FileDropOverlay label="ここで離すと、レシートを取り込みます" />}
-        {!editing && <div>
+        {!fixedPhoto && <div>
           <input ref={fileRef} type="file" accept={desktop ? "image/*,application/pdf" : "image/*"} capture={desktop ? undefined : "environment"} className="hidden" onChange={(event) => { void chooseReceipt(event.target.files?.[0] ?? null); event.target.value = ""; }} />
           <button
             type="button"
@@ -263,7 +283,7 @@ export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Pro
           <img src={previewUrl} alt="レシート" className="max-h-56 w-full bg-slate-50 object-contain" />
         </div>}
         {/* 自動の切り抜きがずれたとき、撮り直さずに4隅を合わせ直す。写真だけ差し替え、読み取った値はそのまま */}
-        {!editing && source && image && <button type="button" className="xr-secondary -mt-2 w-full justify-center" disabled={busy} onClick={() => setCropOpen(true)}>
+        {!fixedPhoto && source && image && <button type="button" className="xr-secondary -mt-2 w-full justify-center" disabled={busy} onClick={() => setCropOpen(true)}>
           <Crop size={16} />切り抜きを直す
         </button>}
         {cropOpen && source && <ReceiptCropEditor
@@ -365,7 +385,7 @@ export function ReceiptForm({ uid, editing, initialFile, onSaved, onClose }: Pro
       <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
         <button type="button" className="xr-secondary" disabled={saving} onClick={onClose}>やめる</button>
         <button type="button" className="xr-primary" disabled={busy} onClick={() => void submit()}>
-          {saving && <Loader2 size={16} className="animate-spin" />}{editing ? "直す" : "登録する"}
+          {saving && <Loader2 size={16} className="animate-spin" />}{editing ? "直す" : draft ? "これで決める" : "登録する"}
         </button>
       </div>
     </div>

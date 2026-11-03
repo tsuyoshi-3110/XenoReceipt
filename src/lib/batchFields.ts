@@ -4,12 +4,12 @@ import type { ReceiptFields } from "@/lib/receipts";
 import { isMixedTaxReceipt, taxRateFromReceipt } from "@/lib/tax";
 
 /*
- * 続けて撮ったレシートを、人が確かめずに保存するときの中身と「要確認か」。
- * Firebase を読まない純粋な計算にして、テストできるように分けてある（保存は batchReceipt.ts）。
+ * まとめて撮ったレシートの読み取り結果を、確かめる一覧に並べる中身にする。
+ * 見てほしい1枚には理由（attention）を付けて目立たせる。Firebase を読まない純粋な計算にして、テストできるように分けてある。
  */
 
-/** 読み取りの結果を、保存する中身と「要確認か」にする。画面を通さないので、1枚ずつの登録の判定と同じ考えで決める */
-export function fieldsFromRead(result: ReceiptReadResult, today: string): { fields: ReceiptFields; needsReview: boolean } {
+/** 読み取りの結果を、一覧に入れる中身と「見てほしい理由」にする。1枚ずつの登録の判定と同じ考えで決める */
+export function fieldsFromRead(result: ReceiptReadResult, today: string): { fields: ReceiptFields; needsReview: boolean; attention: string } {
   if (!result.ok) {
     return {
       fields: {
@@ -24,6 +24,7 @@ export function fieldsFromRead(result: ReceiptReadResult, today: string): { fiel
         memo: "",
       },
       needsReview: true,
+      attention: result.message || "読み取れませんでした。写真を見ながら入れてください。",
     };
   }
   const bucketSum = result.taxable10Amount + result.taxable8Amount + result.taxFreeAmount;
@@ -32,6 +33,12 @@ export function fieldsFromRead(result: ReceiptReadResult, today: string): { fiel
   const taxUnclear = (mixed && Math.abs(bucketSum - result.totalAmount) > 2)
     || (result.hasMultipleTaxRates && !mixed && bucketSum !== result.totalAmount);
   const category = (EXPENSE_CATEGORIES as readonly string[]).includes(result.category) ? result.category : DEFAULT_CATEGORY;
+  const missing = [!result.storeName && "店名", !result.date && "日付", result.totalAmount <= 0 && "合計"].filter(Boolean);
+  const attention = missing.length > 0
+    ? `${missing.join("・")}が読めませんでした。`
+    : taxUnclear
+      ? "税率が混ざっています。内訳が合計と合わないので「詳しく」で確かめてください。"
+      : "";
   return {
     fields: {
       expenseDate: result.date || today,
@@ -44,6 +51,7 @@ export function fieldsFromRead(result: ReceiptReadResult, today: string): { fiel
       category,
       memo: "",
     },
-    needsReview: !result.storeName || !result.date || result.totalAmount <= 0 || taxUnclear,
+    needsReview: attention !== "",
+    attention,
   };
 }

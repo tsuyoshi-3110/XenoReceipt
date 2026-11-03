@@ -171,6 +171,8 @@ type Props = {
   continuous?: boolean;
   /** 続けて撮った枚数（見出しに出す） */
   capturedCount?: number;
+  /** 撮りためた写真から選ぶ。渡したときだけ、シャッターの右にボタンを出す */
+  onPickPhotos?: () => void;
 };
 
 const RING_COLOR: Record<ScanQuality, string> = {
@@ -183,7 +185,7 @@ const RING_COLOR: Record<ScanQuality, string> = {
   ready: "#22c55e",
 };
 
-export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous = false, capturedCount = 0 }: Props) {
+export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous = false, capturedCount = 0, onPickPhotos }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -703,9 +705,9 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous =
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black">
       <div className="flex items-center justify-between px-4 py-3">
-        <div className="text-sm font-extrabold text-white">{continuous ? `続けて撮る（${capturedCount}枚）` : "レシートを撮影"}</div>
+        <div className="text-sm font-extrabold text-white">{continuous && capturedCount > 0 ? `${capturedCount}枚 撮りました` : "レシートを撮影"}</div>
         {continuous
-          ? <button type="button" onClick={onClose} className="inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-extrabold text-black">終わる</button>
+          ? <button type="button" onClick={onClose} className="inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-extrabold text-black">{capturedCount > 0 ? "完了" : "やめる"}</button>
           : <button
             type="button"
             onClick={onClose}
@@ -744,7 +746,7 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous =
             className="h-3 w-3 shrink-0 rounded-full"
             style={{ backgroundColor: RING_COLOR[quality] }}
           />
-          {capturing ? "撮影しています…" : awaitingSwap ? `${capturedCount}枚目を撮りました。次のレシートに置き換えてください` : QUALITY_MESSAGE[quality]}
+          {capturing ? "撮影しています…" : awaitingSwap ? `${capturedCount}枚目を撮りました。次のレシートに置き換えるか、「完了」を押してください` : QUALITY_MESSAGE[quality]}
         </div>
         {/* 自動撮影までの進み具合。いきなり撮られた感じにしない */}
         <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/20">
@@ -810,7 +812,9 @@ export function ReceiptScanner({ onCapture, onClose, onUnavailable, continuous =
           <Camera className="h-7 w-7" />
         </button>
 
-        <span className="w-16" />
+        {onPickPhotos
+          ? <button type="button" onClick={onPickPhotos} className="w-16 text-center text-xs font-bold text-white/80 underline">写真から</button>
+          : <span className="w-16" />}
       </div>
     </div>
   );

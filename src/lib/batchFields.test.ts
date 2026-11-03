@@ -30,8 +30,9 @@ test("読めなかったら今日の日付・既定の費目で、要確認に�
   assert.equal(fields.category, "消耗品費");
 });
 
-test("店名・合計が欠けていたら要確認", () => {
+test("店名・合計が欠けていたら要確認。何が読めなかったかを書く", () => {
   assert.equal(fieldsFromRead(read({ storeName: "" }), "2026-11-03").needsReview, true);
+  assert.equal(fieldsFromRead(read({ storeName: "", totalAmount: 0 }), "2026-11-03").attention, "店名・合計が読めませんでした。");
   assert.equal(fieldsFromRead(read({ totalAmount: 0 }), "2026-11-03").needsReview, true);
 });
 
