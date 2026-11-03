@@ -2,10 +2,8 @@
 
 import {
   GoogleAuthProvider,
-  createUserWithEmailAndPassword,
   getRedirectResult,
   onAuthStateChanged,
-  sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -26,8 +24,8 @@ function loginErrorMessage(code: string | undefined): string {
   if (code === "auth/network-request-failed") return "通信できませんでした。電波のよい所で、もう一度お試しください。";
   if (code === "auth/invalid-email") return "メールアドレスの形が正しくありません。";
   if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") return "メールアドレスかパスワードが違います。";
-  if (code === "auth/email-already-in-use") return "このメールアドレスはもう登録されています。「ログイン」を押してください。";
-  if (code === "auth/weak-password") return "パスワードは6文字以上にしてください。";
+  // 新しい利用者の登録は Firebase で止めてある（2026-11-03 身内だけで使う）。使ったことのない Google アカウントもここに来る
+  if (code === "auth/admin-restricted-operation") return "このアカウントは登録されていません。使いたいときは、管理者に登録を頼んでください。";
   if (code === "auth/too-many-requests") return "続けて失敗したので、しばらく止めています。少し待ってからお試しください。";
   if (code === "auth/account-exists-with-different-credential") return "このメールアドレスは Google で登録されています。「Google でログイン」を押してください。";
   return "ログインできませんでした。もう一度お試しください。";
@@ -72,20 +70,15 @@ export default function Home() {
   /*
    * メールアドレスとパスワードのログイン（2026-11-03）。ホーム画面から開いた iPhone のアプリでは、
    * Google のログインの行き来がうまくいかないことがあるので、画面を移らずに入れる方法を並べる。
-   * 新しく登録した人には確認メールを送り、確認が済むまで AI の読み取りは使えない（サーバーで断る）。
-   * 使い捨てのメールでアカウントを増やして AI を呼び続けられないように。
+   * 自分でアカウントは作れない（身内だけで使う。Firebase で新しい利用者の登録を止めてある）。
+   * アカウントは管理者が Firebase コンソールの「ユーザーを追加」で作る。パスワードを忘れたら再設定のメールで決め直す。
    */
-  async function run(action: "login" | "signup") {
+  async function login() {
     setError(""); setNotice("");
     if (!email.trim() || !password) { setError("メールアドレスとパスワードを入れてください。"); return; }
     setBusy(true);
     try {
-      if (action === "login") {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-      } else {
-        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await sendEmailVerification(credential.user).catch(() => undefined);
-      }
+      await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (cause) {
       setError(loginErrorMessage((cause as { code?: string })?.code));
     } finally {
@@ -126,18 +119,16 @@ export default function Home() {
 
         <div className="flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-200" />またはメールアドレスで<span className="h-px flex-1 bg-slate-200" /></div>
 
-        <form className="space-y-3 text-left" onSubmit={(event) => { event.preventDefault(); void run("login"); }}>
+        <form className="space-y-3 text-left" onSubmit={(event) => { event.preventDefault(); void login(); }}>
           <input className="xr-input" type="email" autoComplete="email" inputMode="email" placeholder="メールアドレス" aria-label="メールアドレス" value={email} disabled={busy} onChange={(event) => setEmail(event.target.value)} />
-          <input className="xr-input" type="password" autoComplete="current-password" placeholder="パスワード（6文字以上）" aria-label="パスワード" value={password} disabled={busy} onChange={(event) => setPassword(event.target.value)} />
-          <div className="flex gap-2">
-            <button type="submit" className="xr-secondary flex-1 justify-center" disabled={busy}>{busy && <Loader2 size={15} className="animate-spin" />}ログイン</button>
-            <button type="button" className="xr-secondary flex-1 justify-center" disabled={busy} onClick={() => void run("signup")}>新しく登録</button>
-          </div>
+          <input className="xr-input" type="password" autoComplete="current-password" placeholder="パスワード" aria-label="パスワード" value={password} disabled={busy} onChange={(event) => setPassword(event.target.value)} />
+          <button type="submit" className="xr-secondary w-full justify-center" disabled={busy}>{busy && <Loader2 size={15} className="animate-spin" />}ログイン</button>
           <button type="button" className="text-xs text-blue-700 underline" disabled={busy} onClick={() => void resetPassword()}>パスワードを忘れたとき</button>
         </form>
 
         {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
         {notice && <p className="text-sm font-semibold text-blue-800">{notice}</p>}
+        <p className="text-xs text-slate-400">アカウントは管理者が作ります。使いたいときは管理者に頼んでください。</p>
       </div>
     </main>
   );
